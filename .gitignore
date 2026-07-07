@@ -1,0 +1,9 @@
+
+.DS_Store
+
+1-papers/
+2-summaries/
+
+*.pdf
+*.txt
+*mapping*.md
