@@ -17,8 +17,9 @@ DEFAULT_OUTPUT_NAME = "session-summary-mapping.md"
 DEFAULT_RENAMED_DIR_NAME = "3-summaries-renamed"
 
 SESSION_FILE_RE = re.compile(r"rollout-.*-(019[0-9a-f-]+)\.jsonl$")
+HOME_RE = re.escape(str(Path.home()))
 ABSOLUTE_UPDATED_FILE_RE = re.compile(
-    r"[AM] (/Users/sly/scripts/Codex-Papers-Summary/2-summaries/[^\n]+?\.md)"
+    rf"[AM] ({HOME_RE}/scripts/Codex-Papers-Summary/2-summaries/[^\n]+?\.md)"
 )
 RELATIVE_UPDATED_FILE_RE = re.compile(r"[AM] (2-summaries/[^\n]+?\.md)")
 
