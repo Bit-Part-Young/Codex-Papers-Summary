@@ -2,11 +2,11 @@
 
 # 将更新的 Obsidian md 文档同步到远程 git 仓库
 
-obsd_md_path="${HOME}/scripts/Claude-Papers-Summary"
+obsd_md_path="${HOME}/scripts/Codex-Papers-Summary"
 if [[ $HOSTNAME =~ "DESKTOP" ]]; then
-  obsd_md_path="/mnt/e/Claude-Papers-Summary"
+  obsd_md_path="/mnt/e/Codex-Papers-Summary"
 elif [[ $HOSTNAME =~ "LAPTOP" ]]; then
-  obsd_md_path="/mnt/d/Claude-Papers-Summary"
+  obsd_md_path="/mnt/d/Codex-Papers-Summary"
 fi
 
 git_update() {
