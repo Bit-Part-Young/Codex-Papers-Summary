@@ -1,3 +1,3 @@
 codexmd:
-	@./update_codex_md
+	@./add_codex_md
 

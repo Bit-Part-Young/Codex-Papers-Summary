@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# 将更新的 Obsidian md 文档同步到远程 git 仓库
+# 将新的文献总结与翻译 md 文档同步到远程 git 仓库
 
-obsd_md_path="${HOME}/scripts/Codex-Papers-Summary"
+refs_md_path="${HOME}/scripts/Codex-Papers-Summary"
 if [[ $HOSTNAME =~ "DESKTOP" ]]; then
-  obsd_md_path="/mnt/e/Codex-Papers-Summary"
+  refs_md_path="/mnt/e/Codex-Papers-Summary"
 elif [[ $HOSTNAME =~ "LAPTOP" ]]; then
-  obsd_md_path="/mnt/d/Codex-Papers-Summary"
+  refs_md_path="/mnt/d/Codex-Papers-Summary"
 fi
 
 git_update() {
@@ -14,20 +14,20 @@ git_update() {
   git status --short --branch
   echo
   git add .
-  git commit -m "update md files"
+  git commit -m "add md files"
   echo
   git push origin "${BRANCH}"
 }
 
 update_num() {
-  cd "${obsd_md_path}" || exit
+  cd "${refs_md_path}" || exit
 
   update_md_num=$(git status --short -z | grep -zc "\.md$")
 
   if [[ $update_md_num -eq 0 ]]; then
-    echo "No md files are updated."
+    echo -e "\nNo md files to add.\n"
   else
-    echo -e "${update_md_num} md file(s) is(are) updated.\n"
+    echo -e "\n${update_md_num} md file(s) is(are) added.\n"
     git_update
   fi
 
