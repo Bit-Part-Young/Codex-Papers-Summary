@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 将新的文献总结与翻译 md 文档同步到远程 git 仓库
+# 将新的文献总结与翻译 md 文档 push 至远程 git 仓库
 
 refs_md_path="${HOME}/scripts/Codex-Papers-Summary"
 if [[ $HOSTNAME =~ "DESKTOP" ]]; then
