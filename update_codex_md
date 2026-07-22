@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# 将更新的 Obsidian md 文档同步到远程 git 仓库
+
+obsd_md_path="${HOME}/scripts/Claude-Papers-Summary"
+if [[ $HOSTNAME =~ "DESKTOP" ]]; then
+  obsd_md_path="/mnt/e/Claude-Papers-Summary"
+elif [[ $HOSTNAME =~ "LAPTOP" ]]; then
+  obsd_md_path="/mnt/d/Claude-Papers-Summary"
+fi
+
+git_update() {
+  BRANCH=$(git branch --show-current)
+  git status --short --branch
+  echo
+  git add .
+  git commit -m "update md files"
+  echo
+  git push origin "${BRANCH}"
+}
+
+update_num() {
+  cd "${obsd_md_path}" || exit
+
+  update_md_num=$(git status --short -z | grep -zc "\.md$")
+
+  if [[ $update_md_num -eq 0 ]]; then
+    echo "No md files are updated."
+  else
+    echo -e "${update_md_num} md file(s) is(are) updated.\n"
+    git_update
+  fi
+
+  cd - >/dev/null 2>&1 || exit
+}
+
+update_num
