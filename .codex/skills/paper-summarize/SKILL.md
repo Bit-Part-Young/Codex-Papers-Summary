@@ -55,7 +55,9 @@ $ARGUMENTS
     * kink：扭折；
     * kink-pair：扭折对；
     * energy landscapes：势能曲面；
-    * nucleation：形核。
+    * nucleation：形核；
+    * edge dislocation：刃位错；
+    * screw dislocation：螺位错。
 * 中文和英文之间、中文和数字之间空一个空格。
 * 行间公式使用 LaTeX $$ ... $$，而非 \[ ... \]。
 * 行内公式、变量符号使用 LaTeX，$ ... $，而非 \( ... \)。
