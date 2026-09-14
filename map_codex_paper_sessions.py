@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,12 +17,10 @@ DEFAULT_PROJECT_DIR = Path("~/scripts/Codex-Papers-Summary").expanduser()
 DEFAULT_CODEX_HOME = Path("~/.codex").expanduser()
 DEFAULT_OUTPUT_NAME = "session-summary-mapping.md"
 DEFAULT_RENAMED_DIR_NAME = "3-summaries-renamed"
+STATE_DIR_NAME = ".map-state"
 
 SESSION_FILE_RE = re.compile(r"rollout-.*-(019[0-9a-f-]+)\.jsonl$")
-HOME_RE = re.escape(str(Path.home()))
-ABSOLUTE_UPDATED_FILE_RE = re.compile(
-    rf"[AM] ({HOME_RE}/scripts/Codex-Papers-Summary/2-summaries/[^\n]+?\.md)"
-)
+ABSOLUTE_UPDATED_FILE_RE = re.compile(r"[AM] (.+?/2-summaries/[^\n]+?\.md)")
 RELATIVE_UPDATED_FILE_RE = re.compile(r"[AM] (2-summaries/[^\n]+?\.md)")
 
 
@@ -71,7 +71,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Copy files from 2-summaries into <project-dir>/3-summaries-renamed "
-            "and rename them using the final session names."
+            "and rename them using the final session names. Existing destination "
+            "files are kept unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--overwrite-renamed",
+        action="store_true",
+        help=(
+            "With --rename, overwrite existing files in 3-summaries-renamed. "
+            "Use this to discard manual edits and copy the current source summaries."
         ),
     )
     return parser.parse_args()
@@ -126,7 +135,9 @@ def extract_created_summary_paths(session_file: Path, project_dir: Path) -> list
     with session_file.open("r", encoding="utf-8", errors="ignore") as handle:
         for line in handle:
             for match in ABSOLUTE_UPDATED_FILE_RE.findall(line):
-                paths.append(Path(match))
+                # Session logs may have been created on a different computer,
+                # where the absolute home directory is not the current one.
+                paths.append(project_dir / "2-summaries" / Path(match).name)
             for match in RELATIVE_UPDATED_FILE_RE.findall(line):
                 paths.append(project_dir / match)
     return sorted(set(paths))
@@ -155,6 +166,11 @@ def build_mappings(codex_home: Path, project_dir: Path) -> list[SessionMapping]:
             continue
 
         for summary_path in summary_paths:
+            # Session logs contain command text as well as command results.  A
+            # path mentioned in a past command, test, or deleted file is not a
+            # current summary and must not prevent the remaining files mapping.
+            if not summary_path.exists():
+                continue
             mappings.append(
                 SessionMapping(
                     session_id=session_id,
@@ -261,21 +277,105 @@ def write_output(markdown: str, output_arg: str | None, project_dir: Path) -> Pa
     return output_path
 
 
-def rename_summaries(mappings: list[SessionMapping], project_dir: Path) -> list[tuple[Path, Path]]:
+def state_path_for(summary_path: Path, state_dir: Path) -> Path:
+    """Return a state-file path stable across devices and destination renames."""
+    source_key = hashlib.sha256(summary_path.name.encode()).hexdigest()
+    return state_dir / f"{source_key[:16]}.md"
+
+
+def legacy_state_path_for(summary_path: Path, state_dir: Path) -> Path:
+    """Return the full-hash state path used by earlier versions of this script."""
+    source_key = hashlib.sha256(summary_path.name.encode()).hexdigest()
+    return state_dir / f"{source_key}.md"
+
+
+def merge_summary(destination_path: Path, base_path: Path, source_path: Path) -> tuple[str, bool]:
+    """Merge source changes into a manually edited destination using Git's 3-way merge."""
+    base_text = base_path.read_text(encoding="utf-8")
+    source_text = source_path.read_text(encoding="utf-8")
+    if source_text.startswith(base_text):
+        # Follow-up translations are commonly appended to the source.  Treat a
+        # pure append specially so that it remains mergeable even if a manual
+        # edit changed the final paragraph of the previous version.
+        destination_text = destination_path.read_text(encoding="utf-8")
+        return destination_text + source_text[len(base_text) :], False
+
+    result = subprocess.run(
+        [
+            "git",
+            "merge-file",
+            "--stdout",
+            "--diff3",
+            "-L",
+            "3-summaries-renamed (manual edits)",
+            "-L",
+            "previously mapped 2-summaries version",
+            "-L",
+            "current 2-summaries version",
+            str(destination_path),
+            str(base_path),
+            str(source_path),
+        ],
+        capture_output=True,
+        encoding="utf-8",
+    )
+    if result.returncode > 1:
+        raise RuntimeError(
+            f"Unable to merge {destination_path.name}: {result.stderr.strip()}"
+        )
+    return result.stdout, result.returncode == 1
+
+
+def rename_summaries(
+    mappings: list[SessionMapping], project_dir: Path, overwrite: bool = False
+) -> tuple[list[tuple[Path, Path]], list[Path], list[Path], list[Path]]:
     destination_dir = project_dir / DEFAULT_RENAMED_DIR_NAME
     destination_dir.mkdir(parents=True, exist_ok=True)
+    state_dir = destination_dir / STATE_DIR_NAME
+    state_dir.mkdir(parents=True, exist_ok=True)
 
     copied: list[tuple[Path, Path]] = []
+    skipped: list[Path] = []
+    merged: list[Path] = []
+    conflicts: list[Path] = []
     for mapping in mappings:
         if not mapping.summary_path.exists():
             raise FileNotFoundError(f"Missing source summary: {mapping.summary_path}")
 
         destination_name = sanitize_filename(mapping.final_name) + ".md"
         destination_path = destination_dir / destination_name
-        shutil.copy2(mapping.summary_path, destination_path)
-        copied.append((mapping.summary_path, destination_path))
+        state_path = state_path_for(mapping.summary_path, state_dir)
+        legacy_state_path = legacy_state_path_for(mapping.summary_path, state_dir)
 
-    return copied
+        if not state_path.exists() and legacy_state_path.exists():
+            legacy_state_path.replace(state_path)
+
+        if not destination_path.exists() or overwrite:
+            shutil.copy2(mapping.summary_path, destination_path)
+            shutil.copy2(mapping.summary_path, state_path)
+            copied.append((mapping.summary_path, destination_path))
+            continue
+
+        if not state_path.exists():
+            # Existing files may contain manual changes made before this feature.
+            # There is no safe common ancestor, so preserve the file and start
+            # tracking future source changes from the current source version.
+            shutil.copy2(mapping.summary_path, state_path)
+            skipped.append(destination_path)
+            continue
+
+        merged_text, has_conflict = merge_summary(
+            destination_path, state_path, mapping.summary_path
+        )
+        destination_path.write_text(merged_text, encoding="utf-8")
+        if has_conflict:
+            conflicts.append(destination_path)
+            continue
+
+        shutil.copy2(mapping.summary_path, state_path)
+        merged.append(destination_path)
+
+    return copied, skipped, merged, conflicts
 
 
 def main() -> int:
@@ -299,8 +399,16 @@ def main() -> int:
         print(f"Markdown 表格已保存到：{output_path}")
 
     if args.rename:
-        copied = rename_summaries(mappings, project_dir)
+        copied, skipped, merged, conflicts = rename_summaries(
+            mappings, project_dir, overwrite=args.overwrite_renamed
+        )
         print(f"已复制并重命名 {len(copied)} 个文件到：{project_dir / DEFAULT_RENAMED_DIR_NAME}")
+        if skipped:
+            print(f"已保留 {len(skipped)} 个已有文件，并已建立后续合并基线")
+        if merged:
+            print(f"已三方合并 {len(merged)} 个已有文件（保留手动修改）")
+        if conflicts:
+            print(f"有 {len(conflicts)} 个文件存在合并冲突，请处理其中的冲突标记")
 
     return 0
 
