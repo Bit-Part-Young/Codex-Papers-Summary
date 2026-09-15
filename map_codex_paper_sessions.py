@@ -20,8 +20,6 @@ DEFAULT_RENAMED_DIR_NAME = "3-summaries-renamed"
 STATE_DIR_NAME = ".map-state"
 
 SESSION_FILE_RE = re.compile(r"rollout-.*-(019[0-9a-f-]+)\.jsonl$")
-ABSOLUTE_UPDATED_FILE_RE = re.compile(r"[AM] (.+?/2-summaries/[^\n]+?\.md)")
-RELATIVE_UPDATED_FILE_RE = re.compile(r"[AM] (2-summaries/[^\n]+?\.md)")
 
 
 @dataclass(frozen=True)
@@ -131,15 +129,44 @@ def extract_session_meta(session_file: Path) -> tuple[str | None, str | None]:
 
 
 def extract_created_summary_paths(session_file: Path, project_dir: Path) -> list[Path]:
+    """Return summaries *added* by this session.
+
+    Do not search arbitrary log text: command output (for example ``ls``) and
+    later diagnostic commands regularly mention existing summaries, which does
+    not mean that the session created them.  Codex persists actual workspace
+    mutations as ``FileChange`` events, so use only ``add`` changes there.
+    """
     paths: list[Path] = []
+
+    def add_if_summary(path_text: object, change: object) -> None:
+        if not isinstance(path_text, str) or not isinstance(change, dict):
+            return
+        if change.get("type") != "add":
+            return
+        path = Path(path_text)
+        if path.parent.name == "2-summaries" and path.suffix == ".md":
+            # Session logs can originate on another computer, so resolve the
+            # filename against the current project instead of trusting the
+            # recorded absolute path.
+            paths.append(project_dir / "2-summaries" / path.name)
+
     with session_file.open("r", encoding="utf-8", errors="ignore") as handle:
-        for line in handle:
-            for match in ABSOLUTE_UPDATED_FILE_RE.findall(line):
-                # Session logs may have been created on a different computer,
-                # where the absolute home directory is not the current one.
-                paths.append(project_dir / "2-summaries" / Path(match).name)
-            for match in RELATIVE_UPDATED_FILE_RE.findall(line):
-                paths.append(project_dir / match)
+        for raw_line in handle:
+            try:
+                item = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+
+            payload = item.get("payload", {})
+            event = payload.get("item", {}) if isinstance(payload, dict) else {}
+            if not isinstance(event, dict) or event.get("type") != "FileChange":
+                continue
+
+            changes = event.get("changes", {})
+            if not isinstance(changes, dict):
+                continue
+            for path_text, change in changes.items():
+                add_if_summary(path_text, change)
     return sorted(set(paths))
 
 

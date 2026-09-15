@@ -1,6 +1,8 @@
 
 .DS_Store
 
+__pycache__/
+
 1-papers/
 2-summaries/
 3-summaries-renamed/.map-state
@@ -8,3 +10,4 @@
 *.pdf
 *.txt
 *mapping*.md
+
