@@ -1,9 +1,9 @@
 # Codex 文献总结与翻译 
 
-保存 使用 Codex 进行文献总结与翻译的输出 '文献总结 - ' md 文档。
+保存 使用 Codex 进行文献总结与翻译的输出 '文献总结 - XXX - 年份' md 文档。
 
 ```bash
-map_codex_paper_sessions.py   # 将使用 Codex 的 session 名称与 2-summaries/ 中的 *.md 文档进行映射与重命名
+map_codex_paper_sessions.py   # 将使用 Codex 的 session 名称与 2-summaries/ 中的 文献总结_*_年份.md 文档进行映射与重命名
 
 .codex/skills/                # 用于 Codex 文献总结与翻译的 SKILL.md 文档
 
